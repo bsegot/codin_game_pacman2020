@@ -132,6 +132,14 @@ if __name__== "__main__":
 # ####################################################################################
 # ####################################################################################
 
+my_pac_list = [{'pac_id': 0, 'mine': True, 'x': 17, 'y': 5, 'type_id': 'NEUTRAL', 'speed_turns_left': 0, 'ability_cooldown': 0}, {'pac_id': 1, 'mine': True, 'x': 27, 'y': 7, 'type_id': 'NEUTRAL', 'speed_turns_left': 0, 'ability_cooldown': 0}]
+pac_object_list = []
+for pac in my_pac_list:
+
+    pac_object = StateMachine()
+    pac_object.add_state("Start", start_transitions)
+
+    pac_object_list.append(pac_object)
 
 import numpy as np
 
