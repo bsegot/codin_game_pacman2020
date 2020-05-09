@@ -1,5 +1,4 @@
 
-# https://dev.to/karn/building-a-simple-state-machine-in-python
 
 
 class State(object):
@@ -9,7 +8,7 @@ class State(object):
     """
 
     def __init__(self):
-        print('Processing current state:', str(self))
+        print('Processing current state:', str(self), file=sys.stderr)
 
     def on_event(self, event):
         """
@@ -55,6 +54,8 @@ class ChaseClosestNormalPallet(State):
             return ChaseClosestSpecialPallet()
 
         return self
+
+
 # End of our states.
 
 
@@ -130,29 +131,8 @@ class SimpleDevice(object):
         self.state = self.state.on_event(event)
 
 
-device = SimpleDevice(pac_type='neutral')
-
-device.on_event('device_locked')
-device.on_event('pin_entered')
-
-device.state
-
-
-device.on_event('device_locked')
-
-device.state
-
-device.on_event('device_locked')
-
-
-
-# todo define the states the pac can be in (exemple search for the biggest// no biggest in sight)
-# todo or search the closest dfs, etc
-# todo add a is_stuck_method that run every turn // easy by checking new params with old attributes
-
-
-
 import numpy as np
+
 
 def print_order_list(order_list):
     char_print = ''
@@ -160,7 +140,7 @@ def print_order_list(order_list):
         if char_print == '':
             char_print = orders
         else:
-            char_print += "| " + orders
+            char_print = char_print + "| " + orders
     return char_print
 
 
@@ -171,8 +151,6 @@ def closest_node(node, nodes):
     return list(nodes[np.argmin(dist_2)]), np.argmin(dist_2)
 
 
-# my_pac_list = [{'pac_id': 0, 'mine': True, 'x': 17, 'y': 5, 'type_id': 'NEUTRAL', 'speed_turns_left': 0, 'ability_cooldown': 0}, {'pac_id': 1, 'mine': True, 'x': 27, 'y': 7, 'type_id': 'NEUTRAL', 'speed_turns_left': 0, 'ability_cooldown': 0}]
-# visible_special_pellet = [[15, 7], [19, 7], [8, 13]]
 
 def allocate_pacs(visible_special_pellet, pac_list):
     """allocate pacs according to the closest to special pallets"""
@@ -194,7 +172,129 @@ def allocate_pacs(visible_special_pellet, pac_list):
     return allocation_list
 
 
+import sys
+import math
 
+# Grab the pellets as fast as you can!
+
+# width: size of the grid
+# height: top left corner is (x=0, y=0)
+width, height = [int(i) for i in input().split()]
+for i in range(height):
+    row = input()  # one line of the grid: space " " is floor, pound "#" is wall
+
+# game loop
+turn = 1
+while True:
+    my_score, opponent_score = [int(i) for i in input().split()]
+    visible_pac_count = int(input())  # all your pacs and enemy pacs in sight
+    my_pac_list = []
+    opponent_pac_list = []
+    for i in range(visible_pac_count):
+        # pac_id: pac number (unique within a team)
+        # mine: true if this pac is yours
+        # x: position in the grid
+        # y: position in the grid
+        # type_id: unused in wood leagues
+        # speed_turns_left: unused in wood leagues
+        # ability_cooldown: unused in wood leagues
+        pac_id, mine, x, y, type_id, speed_turns_left, ability_cooldown = input().split()
+        pac_id = int(pac_id)
+        mine = mine != "0"
+        x = int(x)
+        y = int(y)
+        speed_turns_left = int(speed_turns_left)
+        ability_cooldown = int(ability_cooldown)
+        if mine == True:
+            my_pac_list.append({'pac_id': pac_id, 'mine': mine, 'x': x, 'y': y, 'type_id': type_id,
+                                'speed_turns_left': speed_turns_left, 'ability_cooldown': ability_cooldown})
+        elif mine == False:
+            opponent_pac_list.append({'pac_id': pac_id, 'mine': mine, 'x': x, 'y': y, 'type_id': type_id,
+                                      'speed_turns_left': speed_turns_left, 'ability_cooldown': ability_cooldown})
+
+    print(my_pac_list, file=sys.stderr)
+
+    visible_pellet_count = int(input())  # all pellets in sight
+    visible_normal_pellet = []
+    visible_special_pellet = []
+    for i in range(visible_pellet_count):
+        # value: amount of points this pellet is worth
+        x, y, value = [int(j) for j in input().split()]
+        if value == 1:
+            visible_normal_pellet.append([x, y])
+        elif value == 10:
+            visible_special_pellet.append([x, y])
+
+    # print(visible_special_pellet, file=sys.stderr)
+
+    # Write an action using print
+    # To debug: print("Debug messages...", file=sys.stderr)
+
+    # MOVE <pacId> <x> <y>
+
+    if turn == 1:
+        # assignement of the pacs (first round)
+        allocated_pacs = allocate_pacs(visible_special_pellet, my_pac_list)
+
+        pac_object_list = []
+        order_list = []
+        for pac in allocated_pacs:
+            x = pac['pac_coordonate'][0]
+            y = pac['pac_coordonate'][1]
+            pac_id = pac['pac_id']
+            speed_turns_left = -1
+            ability_cooldown = -1
+            special_pallet = True
+            x_special_pallet = pac['special_pellet'][0]
+            y_special_pallet = pac['special_pellet'][1]
+            special_pallet_location = []
+
+            pac_object = SimpleDevice(x, y, x_special_pallet, y_special_pallet, pac_id, speed_turns_left,
+                                      ability_cooldown, special_pallet, special_pallet_location)
+            str_move = pac_object.get_special_pallet_move()
+
+            pac_object_list.append(pac_object)
+            order_list.append(str_move)
+
+        # print("turn 1", file=sys.stderr)
+        # print(f'we have an order list of {order_list}', file=sys.stderr)
+
+        output = print_order_list(order_list)
+        print(output)
+
+    elif turn > 1:
+        # normal turn, we get 1-information of special pallets outstanding // check if we change states
+        new_pac_object_list = []
+        order_list = []
+        for pac_object in pac_object_list:
+
+            pac_object.update_turn(my_pac_list)
+            print(f'{str(pac_object.state)}', file=sys.stderr)
+            if str(pac_object.state) == 'ChaseClosestSpecialPallet':
+                if pac_object.special_pallet_exist(visible_special_pellet):
+                    str_move = pac_object.get_special_pallet_move()
+                else:
+                    pac_object.on_event('normal_chase')
+                    pac_object.refresh_closest_normal_pallet(visible_normal_pellet)
+                    str_move = pac_object.get_normal_pallet_move()
+            elif str(pac_object.state) == 'ChaseClosestNormalPallet':
+                pac_object.refresh_closest_normal_pallet(visible_normal_pellet)
+                str_move = pac_object.get_normal_pallet_move()
+
+            new_pac_object_list.append(pac_object)
+            order_list.append(str_move)
+
+        output = print_order_list(order_list)
+        print(output)
+
+    turn += 1
+
+
+
+
+
+
+# for tests
 # ####################################################################################
 # ####################################################################################
 
@@ -250,77 +350,4 @@ for pac_object in pac_object_list:
 print_order_list(order_list)
 
 
-
-
-
-
-
-import sys
-import math
-
-# Grab the pellets as fast as you can!
-
-# width: size of the grid
-# height: top left corner is (x=0, y=0)
-width, height = [int(i) for i in input().split()]
-for i in range(height):
-    row = input()  # one line of the grid: space " " is floor, pound "#" is wall
-
-# game loop
-while True:
-    my_score, opponent_score = [int(i) for i in input().split()]
-    visible_pac_count = int(input())  # all your pacs and enemy pacs in sight
-    my_pac_list = []
-    opponent_pac_list = []
-    for i in range(visible_pac_count):
-        # pac_id: pac number (unique within a team)
-        # mine: true if this pac is yours
-        # x: position in the grid
-        # y: position in the grid
-        # type_id: unused in wood leagues
-        # speed_turns_left: unused in wood leagues
-        # ability_cooldown: unused in wood leagues
-        pac_id, mine, x, y, type_id, speed_turns_left, ability_cooldown = input().split()
-        pac_id = int(pac_id)
-        mine = mine != "0"
-        x = int(x)
-        y = int(y)
-        speed_turns_left = int(speed_turns_left)
-        ability_cooldown = int(ability_cooldown)
-        if mine == True:
-            my_pac_list.append({'pac_id': pac_id, 'mine': mine, 'x': x, 'y': y, 'type_id': type_id,
-                                'speed_turns_left': speed_turns_left, 'ability_cooldown': ability_cooldown})
-        elif mine == False:
-            opponent_pac_list.append({'pac_id': pac_id, 'mine': mine, 'x': x, 'y': y, 'type_id': type_id,
-                                      'speed_turns_left': speed_turns_left, 'ability_cooldown': ability_cooldown})
-
-            # print(my_pac_list, file=sys.stderr)
-
-    visible_pellet_count = int(input())  # all pellets in sight
-    visible_normal_pellet = []
-    visible_special_pellet = []
-    for i in range(visible_pellet_count):
-        # value: amount of points this pellet is worth
-        x, y, value = [int(j) for j in input().split()]
-        if value == 1:
-            visible_normal_pellet.append([x, y])
-        elif value == 10:
-            visible_special_pellet.append([x, y])
-
-    # print(visible_special_pellet, file=sys.stderr)
-
-    # Write an action using print
-    # To debug: print("Debug messages...", file=sys.stderr)
-
-    # MOVE <pacId> <x> <y>
-    test = allocate_pacs(visible_special_pellet, my_pac_list)
-
-    char_print = ''
-    for orders in test:
-        if char_print == '':
-            char_print = f"MOVE {orders['pac_id']} {orders['special_pellet'][0]} {orders['special_pellet'][1]}"
-        else:
-            char_print += f" | MOVE {orders['pac_id']} {orders['special_pellet'][0]} {orders['special_pellet'][1]}"
-
-    print(char_print)
-
+pac_object.state
