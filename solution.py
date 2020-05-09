@@ -1,147 +1,167 @@
 
+# https://dev.to/karn/building-a-simple-state-machine-in-python
 
 
+class State(object):
+    """
+    We define a state object which provides some utility functions for the
+    individual states within the state machine.
+    """
 
-# https://www.python-course.eu/finite_state_machine.php
+    def __init__(self):
+        print('Processing current state:', str(self))
+
+    def on_event(self, event):
+        """
+        Handle events that are delegated to this State.
+        """
+        pass
+
+    def __repr__(self):
+        """
+        Leverages the __str__ method to describe the State.
+        """
+        return self.__str__()
+
+    def __str__(self):
+        """
+        Returns the name of the State.
+        """
+        return self.__class__.__name__
 
 
+# Start of our states
+class ChaseClosestSpecialPallet(State):
+    """
+    The state which indicates that there are limited device capabilities.
+    """
 
-class StateMachine:
-    def __init__(self, pac_type, special_pallet=False, special_pallet_location=[]):
-        # todo add constants that define the pac
-        # todo add trigger that define movement_print
-        # todo add method that update at each turn and run the new elements that can trigger a state change
-        self.x = -1
-        self.y = -1
-        self.pac_type = pac_type
+    def on_event(self, event):
+        if event == 'normal_chase':
+            return ChaseClosestNormalPallet()
+
+        return self
+
+
+# class UnlockedState(State):
+class ChaseClosestNormalPallet(State):
+    """
+    The state which indicates that there are no limitations on device
+    capabilities.
+    """
+
+    def on_event(self, event):
+        if event == 'device_locked':
+            return ChaseClosestSpecialPallet()
+
+        return self
+# End of our states.
+
+
+class SimpleDevice(object):
+    """
+    A simple state machine that mimics the functionality of a device from a
+    high level.
+    """
+
+    def __init__(self, x, y, x_special_pallet, y_special_pallet, pac_id, speed_turns_left, ability_cooldown,
+                 special_pallet=False, special_pallet_location=[]):
+        """ Initialize the components. """
+        self.x = x
+        self.y = y
+        self.x_special_pallet = x_special_pallet
+        self.y_special_pallet = y_special_pallet
+        self.pac_id = pac_id
+        self.speed_turns_left = speed_turns_left
+        self.ability_cooldown = ability_cooldown
         self.special_pallet = special_pallet
         self.special_pallet_location = special_pallet_location
-        self.handlers = {}
-        self.startState = None
-        self.endStates = []
+        self.x_closest_normal_pallet = -1
+        self.y_closest_normal_pallet = -1
 
-    def get_closest(self, visible_normal_pellet):
-        """get the closest pallet there is on the board from current pac"""
+        # Start with a default state.
+        if special_pallet:
+            self.state = ChaseClosestSpecialPallet()
+        else:
+            self.state = ChaseClosestNormalPallet()
 
-    def special_pallet_still_exist(self):
-        """check if we still chase the big pallet"""
-
-
-    def add_state(self, name, handler, end_state=0):
-        name = name.upper()
-        self.handlers[name] = handler
-        if end_state:
-            self.endStates.append(name)
-
-    def set_start(self, name):
-        self.startState = name.upper()
-
-    def run(self, cargo):
-        try:
-            handler = self.handlers[self.startState]
-        except:
-            raise Exception("must call .set_start() before .run()")
-        if not self.endStates:
-            raise Exception("at least one state must be an end_state")
-
-        while True:
-            (newState, cargo) = handler(cargo)
-            if newState.upper() in self.endStates:
-                print("reached ", newState)
+    def update_turn(self, my_pac_list):
+        """ update info of the position of our pacs """
+        for pac in my_pac_list:
+            if pac['pac_id'] == self.pac_id:
+                self.x = pac['x']
+                self.y = pac['y']
+                self.speed_turns_left = pac['speed_turns_left']
+                self.ability_cooldown = pac['ability_cooldown']
                 break
-            else:
-                handler = self.handlers[newState.upper()]
 
-positive_adjectives = ["great","super", "fun", "entertaining", "easy"]
-negative_adjectives = ["boring", "difficult", "ugly", "bad"]
+    def refresh_closest_normal_pallet(self, visible_normal_pellet):
+
+        node = [self.x, self.y]
+        best_pac_coordonate, pac_index = closest_node(node, visible_normal_pellet)
+
+        self.x_closest_normal_pallet = best_pac_coordonate[0]
+        self.y_closest_normal_pallet = best_pac_coordonate[1]
+
+    def special_pallet_exist(self, visible_special_pellet):
+        # if the special pellet we target has already been eaten we return 0
+        for special_pellet in visible_special_pellet:
+            if self.x_special_pallet == special_pellet[0] and self.y_special_pallet == special_pellet[1]:
+                return 1
+
+        return 0
+
+    def get_normal_pallet_move(self):
+
+        return f'MOVE {self.pac_id} {self.x_closest_normal_pallet} {self.y_closest_normal_pallet}'
+
+    def get_special_pallet_move(self):
+
+        return f'MOVE {self.pac_id} {self.x_special_pallet} {self.y_special_pallet}'
+
+    def on_event(self, event):
+        """
+        This is the bread and butter of the state machine. Incoming events are
+        delegated to the given states which then handle the event. The result is
+        then assigned as the new state.
+        """
+
+        # The next state will be the result of the on_event function.
+        self.state = self.state.on_event(event)
+
+
+device = SimpleDevice(pac_type='neutral')
+
+device.on_event('device_locked')
+device.on_event('pin_entered')
+
+device.state
+
+
+device.on_event('device_locked')
+
+device.state
+
+device.on_event('device_locked')
+
+
 
 # todo define the states the pac can be in (exemple search for the biggest// no biggest in sight)
 # todo or search the closest dfs, etc
 # todo add a is_stuck_method that run every turn // easy by checking new params with old attributes
 
-def start_transitions(txt):
-    splitted_txt = txt.split(None,1)
-    word, txt = splitted_txt if len(splitted_txt) > 1 else (txt,"")
-    if word == "Python":
-        newState = "Python_state"
-    else:
-        newState = "error_state"
-    return (newState, txt)
 
-def python_state_transitions(txt):
-    splitted_txt = txt.split(None,1)
-    word, txt = splitted_txt if len(splitted_txt) > 1 else (txt,"")
-    if word == "is":
-        newState = "is_state"
-    else:
-        newState = "error_state"
-    return (newState, txt)
-
-def is_state_transitions(txt):
-    splitted_txt = txt.split(None,1)
-    word, txt = splitted_txt if len(splitted_txt) > 1 else (txt,"")
-    if word == "not":
-        newState = "not_state"
-    elif word in positive_adjectives:
-        newState = "pos_state"
-    elif word in negative_adjectives:
-        newState = "neg_state"
-    else:
-        newState = "error_state"
-    return (newState, txt)
-
-def not_state_transitions(txt):
-    splitted_txt = txt.split(None,1)
-    word, txt = splitted_txt if len(splitted_txt) > 1 else (txt,"")
-    if word in positive_adjectives:
-        newState = "neg_state"
-    elif word in negative_adjectives:
-        newState = "pos_state"
-    else:
-        newState = "error_state"
-    return (newState, txt)
-
-def neg_state(txt):
-    print("Hallo")
-    return ("neg_state", "")
-
-if __name__== "__main__":
-    m = StateMachine()
-    m.add_state("Start", start_transitions)
-    m.add_state("Python_state", python_state_transitions)
-    m.add_state("is_state", is_state_transitions)
-    m.add_state("not_state", not_state_transitions)
-    m.add_state("neg_state", None, end_state=1)
-    m.add_state("pos_state", None, end_state=1)
-    m.add_state("error_state", None, end_state=1)
-    m.set_start("Start")
-    m.run("Python is great")
-    m.run("Python is difficult")
-    m.run("Perl is ugly")
-
-    m = StateMachine()
-    m.add_state("Start", start_transitions)
-    m.add_state("chase_special_pellet", chase_special_state_transitions)
-    m.add_state("chase_normal_pellet", chase_normal_state_transitions)
-    m.set_start("Start")
-
-    m.run("Python is great")
-    m.run("Python is difficult")
-    m.run("Perl is ugly")
-
-# ####################################################################################
-# ####################################################################################
-
-my_pac_list = [{'pac_id': 0, 'mine': True, 'x': 17, 'y': 5, 'type_id': 'NEUTRAL', 'speed_turns_left': 0, 'ability_cooldown': 0}, {'pac_id': 1, 'mine': True, 'x': 27, 'y': 7, 'type_id': 'NEUTRAL', 'speed_turns_left': 0, 'ability_cooldown': 0}]
-pac_object_list = []
-for pac in my_pac_list:
-
-    pac_object = StateMachine()
-    pac_object.add_state("Start", start_transitions)
-
-    pac_object_list.append(pac_object)
 
 import numpy as np
+
+def print_order_list(order_list):
+    char_print = ''
+    for orders in order_list:
+        if char_print == '':
+            char_print = orders
+        else:
+            char_print += "| " + orders
+    return char_print
 
 
 def closest_node(node, nodes):
@@ -172,6 +192,67 @@ def allocate_pacs(visible_special_pellet, pac_list):
         del pac_list[pac_index]
 
     return allocation_list
+
+
+
+# ####################################################################################
+# ####################################################################################
+
+my_pac_list = [{'pac_id': 0, 'mine': True, 'x': 17, 'y': 5, 'type_id': 'NEUTRAL', 'speed_turns_left': 0, 'ability_cooldown': 0}, {'pac_id': 1, 'mine': True, 'x': 27, 'y': 7, 'type_id': 'NEUTRAL', 'speed_turns_left': 0, 'ability_cooldown': 0}]
+visible_special_pellet = [[15, 7], [19, 7], [8, 13]]
+
+# assignement of the pacs (first round)
+allocated_pacs = allocate_pacs(visible_special_pellet, my_pac_list)
+
+pac_object_list = []
+order_list = []
+for pac in allocated_pacs:
+    x = pac['pac_coordonate'][0]
+    y = pac['pac_coordonate'][1]
+    pac_id = pac['pac_id']
+    speed_turns_left = -1
+    ability_cooldown = -1
+    special_pallet = True
+    x_special_pallet = pac['special_pellet'][0]
+    y_special_pallet = pac['special_pellet'][1]
+    special_pallet_location = []
+
+    pac_object = SimpleDevice(x, y, x_special_pallet, y_special_pallet, pac_id, speed_turns_left, ability_cooldown, special_pallet, special_pallet_location)
+    str_move = pac_object.get_special_pallet_move()
+
+    pac_object_list.append(pac_object)
+    order_list.append(str_move)
+
+print_order_list(order_list)
+
+
+# #################
+# normal turn, we get 1-information of special pallets outstanding // check if we change states
+new_pac_object_list = []
+order_list = []
+for pac_object in pac_object_list:
+
+    pac_object.update_turn()
+    if pac_object.state.__class__.__name_ == 'ChaseClosestSpecialPallet':
+        if pac_object.special_pallet_exist():
+            str_move = pac_object.get_special_pallet_move()
+        else:
+            pac_object.on_event('normal_chase')
+            pac_object.refresh_closest_normal_pallet()
+            str_move = pac_object.get_normal_pallet_move()
+    elif pac_object.state.__class__.__name_ == 'ChaseClosestNormalPallet':
+        pac_object.refresh_closest_normal_pallet()
+        str_move = pac_object.get_normal_pallet_move()
+
+    new_pac_object_list.append(pac_object)
+    order_list.append(str_move)
+
+print_order_list(order_list)
+
+
+
+
+
 
 
 import sys
@@ -242,3 +323,4 @@ while True:
             char_print += f" | MOVE {orders['pac_id']} {orders['special_pellet'][0]} {orders['special_pellet'][1]}"
 
     print(char_print)
+
