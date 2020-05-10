@@ -67,6 +67,8 @@ class SimpleDevice(object):
         """ Initialize the components. """
         self.x = x
         self.y = y
+        self.previous_x = 0
+        self.previous_y = 0
         self.x_special_pallet = x_special_pallet
         self.y_special_pallet = y_special_pallet
         self.pac_id = pac_id
@@ -90,11 +92,18 @@ class SimpleDevice(object):
         """ update info of the position of our pacs """
         for pac in my_pac_list:
             if pac['pac_id'] == self.pac_id:
+                self.previous_x = self.x
+                self.previous_y = self.y
                 self.x = pac['x']
                 self.y = pac['y']
                 self.speed_turns_left = pac['speed_turns_left']
                 self.ability_cooldown = pac['ability_cooldown']
                 break
+
+    def is_stuck(self):
+        if self.previous_x == self.x and self.previous_y == self.y and self.ability_cooldown != 9:
+            print(f'stuck pac : {self.previous_x} {self.previous_y} cooldown is : {self.ability_cooldown}', file=sys.stderr)
+            return 1
 
     def defensive_mecanism(self, opponent_pac_list):
 
@@ -126,6 +135,21 @@ class SimpleDevice(object):
             return 1, f'SPEED {self.pac_id}'
         else:
             return 0, ''
+
+    def get_next_pallet_to_unstuck(self, initial_pallets_list):
+
+        stucking_target = [self.x_closest_normal_pallet, self.y_closest_normal_pallet]
+        if stucking_target in visible_normal_pellet:
+            visible_normal_pellet.remove(stucking_target)
+        if stucking_target in initial_pallets_list:
+            initial_pallets_list.remove(stucking_target)
+
+        node = [self.x, self.y]
+        best_pac_coordonate, pac_index = closest_node(node, visible_normal_pellet, self.width, self.height, initial_pallets_list)
+
+        self.x_closest_normal_pallet = best_pac_coordonate[0]
+        self.y_closest_normal_pallet = best_pac_coordonate[1]
+
 
     def refresh_closest_normal_pallet(self, visible_normal_pellet, initial_pallets_list):
 
@@ -192,7 +216,7 @@ def less_than_2_tiles(x1, y1, x2, y2):
     nodes = np.asarray([[x2 ,y2]])
     dist_2 = np.sum((nodes - node) ** 2, axis=1)
 
-    if dist_2 < 2:
+    if dist_2 <= 2:
         return 1
     else:
         return 0
@@ -356,12 +380,15 @@ while True:
             pac_object.update_turn(my_pac_list)
             print(f'{str(pac_object.state)}', file=sys.stderr)
 
+            defense_needed, pac_type = pac_object.defensive_mecanism(opponent_pac_list)
+            # if the pack is stuck we force a different move
+            if pac_object.is_stuck():
+                pac_object.get_next_pallet_to_unstuck(initial_pallets_list)
+                str_move = pac_object.get_normal_pallet_move()
             # is there is a defensive aciton to be taken
             # print(f"arg in error{opponent_pac_list}", file=sys.stderr)
-            defense_needed, pac_type = pac_object.defensive_mecanism(opponent_pac_list)
-            if defense_needed:
+            elif defense_needed:
                 str_move = pac_object.get_defensive_move(pac_type)
-
             elif str(pac_object.state) == 'ChaseClosestSpecialPallet':
                 if pac_object.special_pallet_exist(visible_special_pellet):
                     str_move = pac_object.get_special_pallet_move()
@@ -380,9 +407,6 @@ while True:
         print(output)
 
     turn += 1
-
-
-
 
 
 
