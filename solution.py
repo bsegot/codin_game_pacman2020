@@ -1,6 +1,4 @@
 
-
-
 class State(object):
     """
     We define a state object which provides some utility functions for the
@@ -54,8 +52,6 @@ class ChaseClosestNormalPallet(State):
             return ChaseClosestSpecialPallet()
 
         return self
-
-
 # End of our states.
 
 
@@ -66,6 +62,7 @@ class SimpleDevice(object):
     """
 
     def __init__(self, x, y, x_special_pallet, y_special_pallet, pac_id, speed_turns_left, ability_cooldown,
+                 width, height,
                  special_pallet=False, special_pallet_location=[]):
         """ Initialize the components. """
         self.x = x
@@ -79,6 +76,8 @@ class SimpleDevice(object):
         self.special_pallet_location = special_pallet_location
         self.x_closest_normal_pallet = -1
         self.y_closest_normal_pallet = -1
+        self.width = width
+        self.height = height
 
         # Start with a default state.
         if special_pallet:
@@ -99,7 +98,7 @@ class SimpleDevice(object):
     def refresh_closest_normal_pallet(self, visible_normal_pellet):
 
         node = [self.x, self.y]
-        best_pac_coordonate, pac_index = closest_node(node, visible_normal_pellet)
+        best_pac_coordonate, pac_index = closest_node(node, visible_normal_pellet, self.width, self.height)
 
         self.x_closest_normal_pallet = best_pac_coordonate[0]
         self.y_closest_normal_pallet = best_pac_coordonate[1]
@@ -131,8 +130,9 @@ class SimpleDevice(object):
         self.state = self.state.on_event(event)
 
 
-import numpy as np
 
+import numpy as np
+import random
 
 def print_order_list(order_list):
     char_print = ''
@@ -144,15 +144,21 @@ def print_order_list(order_list):
     return char_print
 
 
-def closest_node(node, nodes):
+def closest_node(node, nodes, width, height):
     """find the closest point (euclidian) from (x,y) given a list of candidates points (nodes)"""
+    #   print(f'nodes {nodes}', file=sys.stderr)
+
+    if not nodes:
+        nodes = [[random.randint(0, width), random.randint(0, height)]]
     nodes = np.asarray(nodes)
     dist_2 = np.sum((nodes - node) ** 2, axis=1)
     return list(nodes[np.argmin(dist_2)]), np.argmin(dist_2)
 
 
+# my_pac_list = [{'pac_id': 0, 'mine': True, 'x': 17, 'y': 5, 'type_id': 'NEUTRAL', 'speed_turns_left': 0, 'ability_cooldown': 0}, {'pac_id': 1, 'mine': True, 'x': 27, 'y': 7, 'type_id': 'NEUTRAL', 'speed_turns_left': 0, 'ability_cooldown': 0}]
+# visible_special_pellet = [[15, 7], [19, 7], [8, 13]]
 
-def allocate_pacs(visible_special_pellet, pac_list):
+def allocate_pacs(visible_special_pellet, pac_list, width, height):
     """allocate pacs according to the closest to special pallets"""
 
     allocation_list = []
@@ -163,7 +169,7 @@ def allocate_pacs(visible_special_pellet, pac_list):
         node = [pellet[0], pellet[1]]
         nodes = [[x['x'], x['y']] for x in pac_list]
 
-        best_pac_coordonate, pac_index = closest_node(node, nodes)
+        best_pac_coordonate, pac_index = closest_node(node, nodes, width, height)
         allocation_list.append(
             {'pac_coordonate': best_pac_coordonate, 'pac_id': pac_list[pac_index]['pac_id'], 'special_pellet': node})
 
@@ -172,8 +178,20 @@ def allocate_pacs(visible_special_pellet, pac_list):
     return allocation_list
 
 
+def pac_is_dead(pac_object, my_pac_list):
+
+    pac_id_list = [x['pac_id'] for x in my_pac_list]
+    if pac_object.pac_id not in pac_id_list:
+        return 1
+    else:
+        return 0
+
+
+
 import sys
 import math
+
+
 
 # Grab the pellets as fast as you can!
 
@@ -231,10 +249,11 @@ while True:
     # To debug: print("Debug messages...", file=sys.stderr)
 
     # MOVE <pacId> <x> <y>
-
     if turn == 1:
         # assignement of the pacs (first round)
-        allocated_pacs = allocate_pacs(visible_special_pellet, my_pac_list)
+        initial_pallets = {(x[0], x[1]) for x in visible_normal_pellet}
+        # print(f'initial pellets {initial_pallets}', file=sys.stderr)
+        allocated_pacs = allocate_pacs(visible_special_pellet, my_pac_list, width, height)
 
         pac_object_list = []
         order_list = []
@@ -249,8 +268,7 @@ while True:
             y_special_pallet = pac['special_pellet'][1]
             special_pallet_location = []
 
-            pac_object = SimpleDevice(x, y, x_special_pallet, y_special_pallet, pac_id, speed_turns_left,
-                                      ability_cooldown, special_pallet, special_pallet_location)
+            pac_object = SimpleDevice(x, y, x_special_pallet, y_special_pallet, pac_id, speed_turns_left, ability_cooldown, width, height, special_pallet, special_pallet_location)
             str_move = pac_object.get_special_pallet_move()
 
             pac_object_list.append(pac_object)
@@ -268,6 +286,11 @@ while True:
         order_list = []
         for pac_object in pac_object_list:
 
+            # we update the pallet list
+            # print(f'initial pellets {initial_pallets}', file=sys.stderr)
+            initial_pallets.discard((pac_object.x, pac_object.y))
+            if pac_is_dead(pac_object, my_pac_list):
+                continue
             pac_object.update_turn(my_pac_list)
             print(f'{str(pac_object.state)}', file=sys.stderr)
             if str(pac_object.state) == 'ChaseClosestSpecialPallet':
@@ -291,63 +314,11 @@ while True:
 
 
 
-
-
-
 # for tests
 # ####################################################################################
 # ####################################################################################
 
 my_pac_list = [{'pac_id': 0, 'mine': True, 'x': 17, 'y': 5, 'type_id': 'NEUTRAL', 'speed_turns_left': 0, 'ability_cooldown': 0}, {'pac_id': 1, 'mine': True, 'x': 27, 'y': 7, 'type_id': 'NEUTRAL', 'speed_turns_left': 0, 'ability_cooldown': 0}]
 visible_special_pellet = [[15, 7], [19, 7], [8, 13]]
-
-# assignement of the pacs (first round)
-allocated_pacs = allocate_pacs(visible_special_pellet, my_pac_list)
-
-pac_object_list = []
-order_list = []
-for pac in allocated_pacs:
-    x = pac['pac_coordonate'][0]
-    y = pac['pac_coordonate'][1]
-    pac_id = pac['pac_id']
-    speed_turns_left = -1
-    ability_cooldown = -1
-    special_pallet = True
-    x_special_pallet = pac['special_pellet'][0]
-    y_special_pallet = pac['special_pellet'][1]
-    special_pallet_location = []
-
-    pac_object = SimpleDevice(x, y, x_special_pallet, y_special_pallet, pac_id, speed_turns_left, ability_cooldown, special_pallet, special_pallet_location)
-    str_move = pac_object.get_special_pallet_move()
-
-    pac_object_list.append(pac_object)
-    order_list.append(str_move)
-
-print_order_list(order_list)
-
-
-# #################
-# normal turn, we get 1-information of special pallets outstanding // check if we change states
-new_pac_object_list = []
-order_list = []
-for pac_object in pac_object_list:
-
-    pac_object.update_turn()
-    if pac_object.state.__class__.__name_ == 'ChaseClosestSpecialPallet':
-        if pac_object.special_pallet_exist():
-            str_move = pac_object.get_special_pallet_move()
-        else:
-            pac_object.on_event('normal_chase')
-            pac_object.refresh_closest_normal_pallet()
-            str_move = pac_object.get_normal_pallet_move()
-    elif pac_object.state.__class__.__name_ == 'ChaseClosestNormalPallet':
-        pac_object.refresh_closest_normal_pallet()
-        str_move = pac_object.get_normal_pallet_move()
-
-    new_pac_object_list.append(pac_object)
-    order_list.append(str_move)
-
-print_order_list(order_list)
-
-
+initial_pellets = {(6, 9), (11, 11), (29, 9), (3, 11), (8, 9), (22, 9), (27, 11), (1, 11), (24, 9), (11, 10), (4, 9), (2, 9), (11, 5), (30, 9), (5, 12), (28, 9), (5, 11), (11, 9), (26, 9), (29, 11), (3, 9), (1, 9), (27, 9), (11, 12), (7, 9), (11, 7), (5, 10), (28, 11), (2, 11), (23, 9), (0, 9), (11, 6)}
 pac_object.state
