@@ -62,7 +62,7 @@ class SimpleDevice(object):
     """
 
     def __init__(self, x, y, x_special_pallet, y_special_pallet, pac_id, speed_turns_left, ability_cooldown,
-                 width, height,
+                 width, height, type_id,
                  special_pallet=False, special_pallet_location=[]):
         """ Initialize the components. """
         self.x = x
@@ -78,6 +78,7 @@ class SimpleDevice(object):
         self.y_closest_normal_pallet = -1
         self.width = width
         self.height = height
+        self.type_id = type_id
 
         # Start with a default state.
         if special_pallet:
@@ -94,6 +95,37 @@ class SimpleDevice(object):
                 self.speed_turns_left = pac['speed_turns_left']
                 self.ability_cooldown = pac['ability_cooldown']
                 break
+
+    def defensive_mecanism(self, opponent_pac_list):
+
+        # if there is no enemy in sight
+        if opponent_pac_list == []:
+            return 0, ''
+
+        for opponent in opponent_pac_list:
+
+            if self.type_id == 'PAPER' and opponent['type_id'] == 'SCISSORS':
+                if less_than_2_tiles(self.x, self.y, opponent['x'], opponent['y']):
+                    return 1, 'ROCK'
+            elif self.type_id == 'SCISSORS' and opponent['type_id'] == 'ROCK':
+                if less_than_2_tiles(self.x, self.y, opponent['x'], opponent['y']):
+                    return 1, 'PAPER'
+            elif self.type_id == 'ROCK' and opponent['type_id'] == 'PAPER':
+                if less_than_2_tiles(self.x, self.y, opponent['x'], opponent['y']):
+                    return 1, 'SCISSORS'
+
+        return 0, ''
+
+    def get_defensive_move(self, pac_type):
+        return f'SWITCH {self.pac_id} {pac_type}'
+
+
+    def speed_boost(self):
+        # test, will implement more complex speed management later
+        if self.ability_cooldown == 0:
+            return 1, f'SPEED {self.pac_id}'
+        else:
+            return 0, ''
 
     def refresh_closest_normal_pallet(self, visible_normal_pellet, initial_pallets_list):
 
@@ -154,6 +186,16 @@ def closest_node(node, nodes, width, height, initial_pallets_list):
     dist_2 = np.sum((nodes - node) ** 2, axis=1)
     return list(nodes[np.argmin(dist_2)]), np.argmin(dist_2)
 
+def less_than_2_tiles(x1, y1, x2, y2):
+
+    node = [x1, y1]
+    nodes = np.asarray([[x2 ,y2]])
+    dist_2 = np.sum((nodes - node) ** 2, axis=1)
+
+    if dist_2 < 2:
+        return 1
+    else:
+        return 0
 
 # my_pac_list = [{'pac_id': 0, 'mine': True, 'x': 17, 'y': 5, 'type_id': 'NEUTRAL', 'speed_turns_left': 0, 'ability_cooldown': 0}, {'pac_id': 1, 'mine': True, 'x': 27, 'y': 7, 'type_id': 'NEUTRAL', 'speed_turns_left': 0, 'ability_cooldown': 0}]
 # visible_special_pellet = [[15, 7], [19, 7], [8, 13]]
@@ -172,7 +214,7 @@ def allocate_pacs(visible_special_pellet, visible_normal_pellet, pac_list, width
 
         best_pac_coordonate, pac_index = closest_node(node, nodes, width, height, initial_pallets_list)
         allocation_list.append(
-            {'pac_coordonate': best_pac_coordonate, 'pac_id': pac_list[pac_index]['pac_id'], 'special_pellet': node})
+            {'pac_coordonate': best_pac_coordonate, 'pac_id': pac_list[pac_index]['pac_id'], 'special_pellet': node, 'type_id': pac_list[pac_index]['type_id']})
 
         del pac_list[pac_index]
 
@@ -183,7 +225,7 @@ def allocate_pacs(visible_special_pellet, visible_normal_pellet, pac_list, width
 
             best_pac_coordonate, pac_index = closest_node(node, visible_normal_pellet, width, height, initial_pallets_list)
             allocation_list.append(
-                {'pac_coordonate': [remaining_pac['x'], remaining_pac['y']], 'pac_id': remaining_pac['pac_id'], 'special_pellet': best_pac_coordonate})
+                {'pac_coordonate': [remaining_pac['x'], remaining_pac['y']], 'pac_id': remaining_pac['pac_id'], 'special_pellet': best_pac_coordonate, 'type_id' : remaining_pac['type_id']})
 
     return allocation_list
 
@@ -273,18 +315,23 @@ while True:
             x = pac['pac_coordonate'][0]
             y = pac['pac_coordonate'][1]
             pac_id = pac['pac_id']
-            speed_turns_left = -1
-            ability_cooldown = -1
+            speed_turns_left = 0
+            ability_cooldown = 0
             special_pallet = True
             x_special_pallet = pac['special_pellet'][0]
             y_special_pallet = pac['special_pellet'][1]
             special_pallet_location = []
+            type_id = pac['type_id']
 
-            pac_object = SimpleDevice(x, y, x_special_pallet, y_special_pallet, pac_id, speed_turns_left, ability_cooldown, width, height, special_pallet, special_pallet_location)
-            str_move = pac_object.get_special_pallet_move()
+            pac_object = SimpleDevice(x, y, x_special_pallet, y_special_pallet, pac_id, speed_turns_left, ability_cooldown, width, height, type_id, special_pallet, special_pallet_location)
 
+            activate_speed ,str_speed = pac_object.speed_boost()
+            if activate_speed:
+                order_list.append(str_speed)
+            # str_move = pac_object.get_special_pallet_move()
+            # order_list.append(str_move)
             pac_object_list.append(pac_object)
-            order_list.append(str_move)
+
 
         # print("turn 1", file=sys.stderr)
         # print(f'we have an order list of {order_list}', file=sys.stderr)
@@ -308,7 +355,14 @@ while True:
                 continue
             pac_object.update_turn(my_pac_list)
             print(f'{str(pac_object.state)}', file=sys.stderr)
-            if str(pac_object.state) == 'ChaseClosestSpecialPallet':
+
+            # is there is a defensive aciton to be taken
+            # print(f"arg in error{opponent_pac_list}", file=sys.stderr)
+            defense_needed, pac_type = pac_object.defensive_mecanism(opponent_pac_list)
+            if defense_needed:
+                str_move = pac_object.get_defensive_move(pac_type)
+
+            elif str(pac_object.state) == 'ChaseClosestSpecialPallet':
                 if pac_object.special_pallet_exist(visible_special_pellet):
                     str_move = pac_object.get_special_pallet_move()
                 else:
@@ -332,6 +386,7 @@ while True:
 
 
 
+
 # for tests
 # ####################################################################################
 # ####################################################################################
@@ -340,3 +395,7 @@ my_pac_list = [{'pac_id': 0, 'mine': True, 'x': 17, 'y': 5, 'type_id': 'NEUTRAL'
 visible_special_pellet = [[15, 7], [19, 7], [8, 13]]
 initial_pellets = {(6, 9), (11, 11), (29, 9), (3, 11), (8, 9), (22, 9), (27, 11), (1, 11), (24, 9), (11, 10), (4, 9), (2, 9), (11, 5), (30, 9), (5, 12), (28, 9), (5, 11), (11, 9), (26, 9), (29, 11), (3, 9), (1, 9), (27, 9), (11, 12), (7, 9), (11, 7), (5, 10), (28, 11), (2, 11), (23, 9), (0, 9), (11, 6)}
 pac_object.state
+
+
+
+
